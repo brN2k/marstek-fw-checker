@@ -296,12 +296,27 @@ async function getFirmwareInfo(deviceId, deviceType = 'HMG-50', currentVersion =
     }
 
     try {
+        const isB2500DDevice = deviceType === 'HMJ-2';
         // Check if this is a CT device by device type only
         const isCTDevice = deviceType && (deviceType === 'HME-3' || deviceType === 'HME-4');
         
         let params;
         
-        if (isCTDevice) {
+        if (isB2500DDevice) {
+            // The Marstek app currently uses the b2500 endpoint (without a trailing "d")
+            // for B2500D devices reported as HMJ-2.
+            params = {
+                endpoint: '/app/neng/v2_get_otadevice_b2500.php',
+                m: String(currentVersion || '100'),
+                subversion: '0',
+                uid: deviceId,
+                lang: 'English',
+                click: 'true',
+                token: currentToken,
+                mailbox: currentEmail,
+                device_type: deviceType
+            };
+        } else if (isCTDevice) {
             // CT devices use a different API endpoint
             params = {
                 endpoint: '/ems/api/v1/checkAcCoupleOta',
@@ -552,7 +567,12 @@ async function showFirmwareDetails(device) {
     
     try {
         // Pass both device type and name for better detection
-        const firmwareData = await getFirmwareInfo(device.devid, device.type || 'HMG-50', '100', device.name);
+        const firmwareData = await getFirmwareInfo(
+            device.devid,
+            device.type || 'HMG-50',
+            device.type === 'HMJ-2' ? (device.version || '100') : '100',
+            device.name
+        );
         displayFirmwareDetails(device, firmwareData);
     } catch (error) {
         modalBody.innerHTML = `
@@ -1004,9 +1024,9 @@ async function updateArchiveStatus(device, firmwareData) {
         
         // Check each firmware type
         for (const check of archiveChecks) {
-            // For CT devices (HME-4, HME-3), don't pass firmware type (flatter structure)
-            const isCTDevice = check.deviceType === 'HME-4' || check.deviceType === 'HME-3';
-            const archiveResult = isCTDevice 
+            // Single-firmware devices use the flatter archive structure.
+            const isSingleFirmwareDevice = check.deviceType === 'HME-4' || check.deviceType === 'HME-3' || check.deviceType === 'HMJ-2';
+            const archiveResult = isSingleFirmwareDevice
                 ? await checkFirmwareArchive(check.deviceType, '', check.version)
                 : await checkFirmwareArchive(check.deviceType, check.type, check.version);
             
@@ -1346,10 +1366,23 @@ async function showFirmwareRawData(deviceId) {
     
     try {
         // Determine which API endpoint and parameters will be used
+        const isB2500DDevice = device.type === 'HMJ-2';
         const isCTDevice = device.type && (device.type === 'HME-3' || device.type === 'HME-4');
         
         let apiUrl, params;
-        if (isCTDevice) {
+        if (isB2500DDevice) {
+            apiUrl = 'https://eu.hamedata.com/app/neng/v2_get_otadevice_b2500.php';
+            params = {
+                'm': String(device.version || '100'),
+                'subversion': '0',
+                'uid': device.devid,
+                'lang': 'English',
+                'click': 'true',
+                'token': currentToken,
+                'mailbox': currentEmail,
+                'device_type': device.type
+            };
+        } else if (isCTDevice) {
             // CT device endpoint
             apiUrl = 'https://eu.hamedata.com/ems/api/v1/checkAcCoupleOta';
             params = {
@@ -1384,7 +1417,12 @@ async function showFirmwareRawData(deviceId) {
         const fullUrl = `${apiUrl}?${urlParams.toString()}`;
         
         // Make the API call
-        const firmwareData = await getFirmwareInfo(device.devid, device.type || 'HMG-50', '100', device.name);
+        const firmwareData = await getFirmwareInfo(
+            device.devid,
+            device.type || 'HMG-50',
+            isB2500DDevice ? (device.version || '100') : '100',
+            device.name
+        );
         
         // Show raw response with API details
         const rawResponse = {
@@ -1392,10 +1430,12 @@ async function showFirmwareRawData(deviceId) {
                 id: device.devid,
                 name: device.name,
                 type: device.type,
-                detectedAs: isCTDevice ? 'CT Device' : 'Standard Device'
+                detectedAs: isB2500DDevice ? 'B2500D Device' : (isCTDevice ? 'CT Device' : 'Standard Device')
             },
             apiCall: {
-                endpoint: isCTDevice ? '/ems/api/v1/checkAcCoupleOta' : '/ems/api/v2/checkSmallBalconyOTA',
+                endpoint: isB2500DDevice
+                    ? '/app/neng/v2_get_otadevice_b2500.php'
+                    : (isCTDevice ? '/ems/api/v1/checkAcCoupleOta' : '/ems/api/v2/checkSmallBalconyOTA'),
                 fullUrl: fullUrl,
                 method: 'GET',
                 parameters: params
