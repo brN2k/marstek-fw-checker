@@ -397,6 +397,37 @@ async function getFirmwareInfo(deviceId, deviceType = 'HMG-50', currentVersion =
     }
 }
 
+// Get communication-module firmware information for B2500D/HMJ-2 devices.
+async function getCommunicationFirmwareInfo(deviceId, deviceType) {
+    if (!currentToken) {
+        throw new Error('Not authenticated. Please login first.');
+    }
+
+    const params = new URLSearchParams({
+        endpoint: '/ems/api/v1/getCheckWifiOta',
+        version: '0',
+        devid: deviceId,
+        device_type: deviceType
+    });
+
+    const response = await fetch(`/.netlify/functions/marstek-proxy?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${currentToken}`,
+            'token': currentToken
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Communication firmware API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const responseText = await response.text();
+    console.log('Communication firmware response:', responseText);
+    return JSON.parse(responseText);
+}
+
 // Download firmware file
 function downloadFirmware(downloadUrl, filename) {
     try {
@@ -566,14 +597,30 @@ async function showFirmwareDetails(device) {
     modal.style.display = 'block';
     
     try {
-        // Pass both device type and name for better detection
-        const firmwareData = await getFirmwareInfo(
+        const firmwareRequest = getFirmwareInfo(
             device.devid,
             device.type || 'HMG-50',
             '100',
             device.name
         );
-        displayFirmwareDetails(device, firmwareData);
+        const communicationRequest = device.type === 'HMJ-2'
+            ? getCommunicationFirmwareInfo(device.devid, device.type)
+            : Promise.resolve(null);
+
+        const [firmwareResult, communicationResult] = await Promise.allSettled([
+            firmwareRequest,
+            communicationRequest
+        ]);
+
+        if (firmwareResult.status === 'rejected') {
+            throw firmwareResult.reason;
+        }
+
+        const communicationFirmwareData = communicationResult.status === 'fulfilled'
+            ? communicationResult.value
+            : { error: communicationResult.reason?.message || 'Communication firmware check failed' };
+
+        displayFirmwareDetails(device, firmwareResult.value, communicationFirmwareData);
     } catch (error) {
         modalBody.innerHTML = `
             <div class="firmware-section">
@@ -671,7 +718,7 @@ async function submitFirmwareToArchive(metadata, deviceInfo, notes = '') {
 }
 
 // Display firmware details in modal
-function displayFirmwareDetails(device, firmwareData) {
+function displayFirmwareDetails(device, firmwareData, communicationFirmwareData = null) {
     const modalBody = document.getElementById('modalBody');
     
     let html = '';
@@ -902,6 +949,34 @@ function displayFirmwareDetails(device, firmwareData) {
     }
     
     html += '</div>';
+
+    if (device.type === 'HMJ-2') {
+        const communicationData = communicationFirmwareData?.data;
+        const hasCommunicationUpdate = Array.isArray(communicationData)
+            ? communicationData.length > 0
+            : Boolean(communicationData && (typeof communicationData !== 'object' || Object.keys(communicationData).length > 0));
+
+        html += `
+            <div class="firmware-section">
+                <h3>${hasCommunicationUpdate ? 'Communication Firmware Available' : 'Communication Module'}</h3>
+        `;
+
+        if (communicationFirmwareData?.error) {
+            html += `<p style="color: #f44336; font-weight: 600;">Communication firmware check failed: ${communicationFirmwareData.error}</p>`;
+        } else if (hasCommunicationUpdate) {
+            html += '<p style="color: #FF9800; font-weight: 600;">Marstek servers returned communication-module firmware data.</p>';
+        } else {
+            html += '<p style="color: #4CAF50; font-weight: 600;">No communication-module firmware update is available.</p>';
+        }
+
+        html += `
+                <div class="release-notes">
+                    <h4>Communication API Response</h4>
+                    <pre style="background: #2d2d2d; color: #e0e0e0; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 12px; max-height: 200px;">${JSON.stringify(communicationFirmwareData, null, 2)}</pre>
+                </div>
+            </div>
+        `;
+    }
     
     // Raw API Response (for debugging)
     html += `
@@ -1423,6 +1498,14 @@ async function showFirmwareRawData(deviceId) {
             '100',
             device.name
         );
+        let communicationFirmwareData = null;
+        if (isB2500DDevice) {
+            try {
+                communicationFirmwareData = await getCommunicationFirmwareInfo(device.devid, device.type);
+            } catch (error) {
+                communicationFirmwareData = { error: error.message };
+            }
+        }
         
         // Show raw response with API details
         const rawResponse = {
@@ -1443,6 +1526,24 @@ async function showFirmwareRawData(deviceId) {
             timestamp: new Date().toISOString(),
             response: firmwareData
         };
+
+        if (isB2500DDevice) {
+            const communicationParams = {
+                version: '0',
+                devid: device.devid,
+                device_type: device.type
+            };
+            const communicationUrl = `https://eu.hamedata.com/ems/api/v1/getCheckWifiOta?${new URLSearchParams(communicationParams).toString()}`;
+
+            rawResponse.communicationApiCall = {
+                endpoint: '/ems/api/v1/getCheckWifiOta',
+                fullUrl: communicationUrl,
+                method: 'GET',
+                parameters: communicationParams,
+                authentication: 'Session token forwarded in Authorization and token headers'
+            };
+            rawResponse.communicationResponse = communicationFirmwareData;
+        }
         
         // Store original data for reset functionality
         originalApiData = rawResponse;

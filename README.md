@@ -107,6 +107,7 @@ python -m http.server 8000
 - **Standard Devices**: `https://eu.hamedata.com/ems/api/v2/checkSmallBalconyOTA`
 - **CT Devices**: `https://eu.hamedata.com/ems/api/v1/checkAcCoupleOta`
 - **B2500D (HMJ-2)**: `https://eu.hamedata.com/app/neng/v2_get_otadevice_b2500.php`
+- **B2500D Communication Module**: `https://eu.hamedata.com/ems/api/v1/getCheckWifiOta`
 
 ### Archive APIs
 - **Status Check**: `/.netlify/functions/check-firmware-archive`
