@@ -307,7 +307,7 @@ async function getFirmwareInfo(deviceId, deviceType = 'HMG-50', currentVersion =
             // for B2500D devices reported as HMJ-2.
             params = {
                 endpoint: '/app/neng/v2_get_otadevice_b2500.php',
-                m: String(currentVersion || '100'),
+                m: '100',
                 subversion: '0',
                 uid: deviceId,
                 lang: 'English',
@@ -570,7 +570,7 @@ async function showFirmwareDetails(device) {
         const firmwareData = await getFirmwareInfo(
             device.devid,
             device.type || 'HMG-50',
-            device.type === 'HMJ-2' ? (device.version || '100') : '100',
+            '100',
             device.name
         );
         displayFirmwareDetails(device, firmwareData);
@@ -1373,7 +1373,7 @@ async function showFirmwareRawData(deviceId) {
         if (isB2500DDevice) {
             apiUrl = 'https://eu.hamedata.com/app/neng/v2_get_otadevice_b2500.php';
             params = {
-                'm': String(device.version || '100'),
+                'm': '100',
                 'subversion': '0',
                 'uid': device.devid,
                 'lang': 'English',
@@ -1420,7 +1420,7 @@ async function showFirmwareRawData(deviceId) {
         const firmwareData = await getFirmwareInfo(
             device.devid,
             device.type || 'HMG-50',
-            isB2500DDevice ? (device.version || '100') : '100',
+            '100',
             device.name
         );
         
