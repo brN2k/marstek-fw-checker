@@ -965,6 +965,35 @@ function displayFirmwareDetails(device, firmwareData, communicationFirmwareData 
             html += `<p style="color: #f44336; font-weight: 600;">Communication firmware check failed: ${communicationFirmwareData.error}</p>`;
         } else if (hasCommunicationUpdate) {
             html += '<p style="color: #FF9800; font-weight: 600;">Marstek servers returned communication-module firmware data.</p>';
+
+            const communicationVersion = communicationData?.version || 'Unknown';
+            const communicationUrl = communicationData?.url;
+
+            html += `
+                <div class="firmware-details">
+                    <div class="firmware-detail">
+                        <label>Communication Firmware</label>
+                        <value>Version ${communicationVersion}</value>
+                    </div>
+                </div>
+            `;
+
+            if (communicationUrl) {
+                let communicationFilename = `communication_${device.devid}_v${communicationVersion}.rbl`;
+                try {
+                    communicationFilename = new URL(communicationUrl).pathname.split('/').pop() || communicationFilename;
+                } catch (error) {
+                    console.warn('Could not derive communication firmware filename:', error);
+                }
+
+                html += `
+                    <div class="download-section">
+                        <button class="btn btn-primary" onclick='downloadFirmware(${JSON.stringify(communicationUrl)}, ${JSON.stringify(communicationFilename)})'>
+                            Download Communication Firmware v${communicationVersion}
+                        </button>
+                    </div>
+                `;
+            }
         } else {
             html += '<p style="color: #4CAF50; font-weight: 600;">No communication-module firmware update is available.</p>';
         }
